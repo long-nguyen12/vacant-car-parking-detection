@@ -1,8 +1,11 @@
 import datetime
 import hashlib
+import json
 
 import cv2
 import tensorflow as tf
+from bson import json_util
+from bson.json_util import dumps
 from flask import Flask, render_template, Response, request, session, jsonify
 from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
 from pymongo import MongoClient
@@ -11,7 +14,7 @@ import imutils
 from imutils.video import WebcamVideoStream
 
 from commons import commonFunctions
-from detect import detect
+from detect import detect, get_vacant
 
 app = Flask(__name__)
 
@@ -41,12 +44,30 @@ def gen_frames():
         # if not success:
         #     break
         # else:
-        image, count = detect(saved_model_loaded, frame, ground_truth)
+        image, count, vacant = detect(saved_model_loaded, frame, ground_truth)
         ret, buffer = cv2.imencode('.jpg', image)
         cv2.waitKey(1)
         image = buffer.tobytes()
         yield (b'--frame\r\n'
                b'Content-Type: image/jpeg\r\n\r\n' + image + b'\r\n')
+        yield str(vacant)
+
+
+@app.route('/api/v1/vacant', methods=['GET'])
+def get_parking_vacant():
+    saved_model_loaded = tf.saved_model.load('./checkpoints/yolov4-416', tags=[tag_constants.SERVING])
+    ground_truth = commonFunctions.get_ground_truth('./data/ground_truth/video_1.p')
+    rgb_image = None
+    while True:
+        frame = camera.read()
+        rgb_image = frame
+        break
+    print(rgb_image)
+    vacant = get_vacant(saved_model_loaded, rgb_image, ground_truth)
+
+    data = dumps(vacant, default=json_util.default)
+    # return jsonify({'data': json.load(data)}), 200
+    return jsonify(vacant=str(vacant)), 200
 
 
 @app.route("/api/v1/users", methods=["POST"])
