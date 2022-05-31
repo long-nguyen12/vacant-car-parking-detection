@@ -7,6 +7,8 @@ from flask import Flask, render_template, Response, request, session, jsonify
 from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
 from pymongo import MongoClient
 from tensorflow.python.saved_model import tag_constants
+import imutils
+from imutils.video import WebcamVideoStream
 
 from commons import commonFunctions
 from detect import detect
@@ -23,10 +25,11 @@ db = client["parking"]
 users_collection = db["users"]
 cameras_collection = db["cameras"]
 
-camera = cv2.VideoCapture(
-    'rtsp://admin:Admin12345@tronghau8.kbvision.tv:37779/cam/realmonitor?channel=1&subtype=0')  # use 0 for web camera
+# camera = cv2.VideoCapture(
+#     'rtsp://admin:Admin12345@tronghau8.kbvision.tv:37779/cam/realmonitor?channel=1&subtype=0')  # use 0 for web camera
 
-
+domain_port = 'tronghau5.dssddns.net:37779'
+camera = WebcamVideoStream('rtsp://admin:Admin12345@{}/cam/realmonitor?channel=1&subtype=0'.format(str(domain_port))).start()
 # camera = cv2.VideoCapture(0)
 
 
@@ -34,15 +37,16 @@ def gen_frames():
     saved_model_loaded = tf.saved_model.load('./checkpoints/yolov4-416', tags=[tag_constants.SERVING])
     ground_truth = commonFunctions.get_ground_truth('./data/ground_truth/video_1.p')
     while True:
-        success, frame = camera.read()
-        if not success:
-            break
-        else:
-            image, count = detect(saved_model_loaded, frame, ground_truth)
-            ret, buffer = cv2.imencode('.jpg', image)
-            image = buffer.tobytes()
-            yield (b'--frame\r\n'
-                   b'Content-Type: image/jpeg\r\n\r\n' + image + b'\r\n')
+        frame = camera.read()
+        # if not success:
+        #     break
+        # else:
+        image, count = detect(saved_model_loaded, frame, ground_truth)
+        ret, buffer = cv2.imencode('.jpg', image)
+        cv2.waitKey(1)
+        image = buffer.tobytes()
+        yield (b'--frame\r\n'
+               b'Content-Type: image/jpeg\r\n\r\n' + image + b'\r\n')
 
 
 @app.route("/api/v1/users", methods=["POST"])
@@ -119,4 +123,4 @@ def index():
 
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+    app.run(host='0.0.0.0', port=5000, debug=True)
